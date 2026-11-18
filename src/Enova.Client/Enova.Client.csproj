@@ -13,7 +13,7 @@
     <Version>0.0.1</Version>
     <Authors>EGOV</Authors>
     <StartupObject>Lragrz.Enova.Client.App</StartupObject>
-    <ApplicationIcon Condition="Exists('Resources\icon.ico')">Resources\icon.ico</ApplicationIcon>
+    <ApplicationIcon>Resources\icon.ico</ApplicationIcon>
 
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
@@ -38,8 +38,8 @@
   <ItemGroup>
     <None Include="..\..\config\eNoVa_tor.client.properties" Link="eNoVa_tor.client.properties" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\samples\debug-enova-2900003.xml" Link="samples\debug-enova-2900003.xml" CopyToOutputDirectory="PreserveNewest" />
-    <Resource Include="Resources\icon.png" Condition="Exists('Resources\icon.png')" />
-    <Resource Include="Resources\icon.ico" Condition="Exists('Resources\icon.ico')" />
+    <Resource Include="Resources\icon.png" />
+    <Resource Include="Resources\icon.ico" />
   </ItemGroup>
 
 </Project>

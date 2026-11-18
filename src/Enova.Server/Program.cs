@@ -10,6 +10,10 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 
+// Allow running as a Windows Service (no-op on non-Windows / interactive console)
+builder.Host.UseWindowsService();
+
+
 // --- Network: fully configuration-driven (no hard-coded bind/port) ---
 var enovaConfigEarly = ConfigurationLoader.Load(fileName: "eNoVa_tor.server.properties");
 var listenUrls = enovaConfigEarly.ResolveListenUrls();
@@ -116,7 +120,7 @@ if (enovaConfig.ForwardedHeaders)
                          | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
                          | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedHost
     };
-    fwd.KnownNetworks.Clear();
+    fwd.KnownIPNetworks.Clear();
     fwd.KnownProxies.Clear();
     app.UseForwardedHeaders(fwd);
 }

@@ -5,6 +5,7 @@
         Height="560" Width="440"
         MinHeight="540" MinWidth="420"
         WindowStartupLocation="CenterScreen"
+        Icon="pack://application:,,,/Resources/icon.ico"
         ResizeMode="NoResize"
         Background="#F5F6F8">
   <Grid Margin="24">

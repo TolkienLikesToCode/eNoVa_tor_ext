@@ -5,6 +5,7 @@
         Height="820" Width="1280"
         MinHeight="700" MinWidth="1100"
         WindowStartupLocation="CenterScreen"
+        Icon="pack://application:,,,/Resources/icon.ico"
         Background="#F5F6F8">
 
   <Window.Resources>

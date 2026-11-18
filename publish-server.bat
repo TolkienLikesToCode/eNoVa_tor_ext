@@ -1,21 +1,33 @@
 @echo off
-echo Publishing Enova.Server as single-file self-contained executable...
-dotnet publish src\Enova.Server\Enova.Server.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o artifacts\server
+setlocal EnableExtensions
+cd /d "%~dp0"
+echo Publishing eNoVa_tor.Server (win-x64, single-file, compressed)...
+dotnet publish src\Enova.Server\Enova.Server.csproj -c Release -r win-x64 --self-contained true ^
+  -p:PublishSingleFile=true ^
+  -p:IncludeNativeLibrariesForSelfExtract=true ^
+  -p:EnableCompressionInSingleFile=true ^
+  -o artifacts\server
 if errorlevel 1 goto :fail
 
-REM Copy server config next to the server EXE
 if not exist artifacts\server\config mkdir artifacts\server\config
-copy /Y config\enova.server.properties artifacts\server\enova.server.properties >nul
-copy /Y config\enova.server.properties artifacts\server\config\enova.server.properties >nul
+if exist config\eNoVa_tor.server.properties (
+  copy /Y config\eNoVa_tor.server.properties artifacts\server\eNoVa_tor.server.properties >nul
+  copy /Y config\eNoVa_tor.server.properties artifacts\server\config\eNoVa_tor.server.properties >nul
+)
+if exist config\eNoVa_tor.docuware.properties (
+  copy /Y config\eNoVa_tor.docuware.properties artifacts\server\eNoVa_tor.docuware.properties >nul
+)
+if exist src\Enova.Server\appsettings.json (
+  copy /Y src\Enova.Server\appsettings.json artifacts\server\appsettings.json >nul
+)
 
 echo.
-echo Done. Output in artifacts\server\
+echo Done: artifacts\server\
+echo Install as Windows Service: scripts\windows\install-service.bat
 echo.
 pause
 exit /b 0
-
 :fail
 echo Publish failed.
 pause
 exit /b 1
-
