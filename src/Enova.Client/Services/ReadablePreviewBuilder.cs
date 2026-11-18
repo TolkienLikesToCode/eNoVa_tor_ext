@@ -151,13 +151,5 @@ public static class ReadablePreviewBuilder
             AppendPersonLines(sb, b, nsmgr, title);
     }
 
-    private static string? EnovaDateTime.FormatDisplay(string? iso)
-    {
-        if (string.IsNullOrWhiteSpace(iso)) return null;
-        iso = iso.Trim();
-        if (iso.Length >= 10 && iso[4] == '-' && iso[7] == '-')
-            return $"{iso[8..10]}.{iso[5..7]}.{iso[0..4]}";
-        return iso;
-    }
 }
 
