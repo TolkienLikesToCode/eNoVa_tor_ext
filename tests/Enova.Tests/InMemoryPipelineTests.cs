@@ -34,7 +34,7 @@ public class InMemoryPipelineTests
         using var loggerFactory = CreateLoggerFactory();
         var factory = new QesProviderFactory(config, loggerFactory);
         var provider = factory.Create();
-        var processor = new EnovaXmlProcessor(provider, loggerFactory.CreateLogger<EnovaXmlProcessor>());
+        var processor = new EnovaXmlProcessor(provider, loggerFactory.CreateLogger<EnovaXmlProcessor>(), signingEnabled: true);
 
         var answer = new AnswerParameters
         {
@@ -80,6 +80,31 @@ public class InMemoryPipelineTests
         Console.WriteLine($"Debug signed XML written to: {outPath}");
     }
 
+
+    [Fact]
+    public async Task Process_SampleXml_WithSigningDisabled_ProducesUnsignedAnswer()
+    {
+        var samplePath = Path.Combine(AppContext.BaseDirectory, "samples", "debug-enova-2900003.xml");
+        Assert.True(File.Exists(samplePath));
+        var config = new EnovaConfiguration { CryptoProvider = "MOCK_FALLBACK", SigningEnabled = false };
+        using var loggerFactory = CreateLoggerFactory();
+        var provider = new QesProviderFactory(config, loggerFactory).Create();
+        var processor = new EnovaXmlProcessor(provider, loggerFactory.CreateLogger<EnovaXmlProcessor>(), signingEnabled: false);
+        var answer = new AnswerParameters
+        {
+            FileNumber = "GEM-2026-7788",
+            MessageId = "msg-answer-" + Guid.NewGuid().ToString("N"),
+            CaseworkerName = "Antonia",
+            DecisionCodes = new[] { "001" }
+        };
+        await using var stream = File.OpenRead(samplePath);
+        var result = await processor.ProcessAsync(stream, answer);
+        Assert.Equal("NONE", result.ProviderId);
+        var nsmgr = new XmlNamespaceManager(result.SignedDocument.NameTable);
+        nsmgr.AddNamespace("ds", SignedXml.XmlDsigNamespaceUrl);
+        Assert.Null(result.SignedDocument.SelectSingleNode("//ds:Signature", nsmgr));
+    }
+
     [Fact]
     public async Task MockProvider_IsAlwaysAvailable()
     {
@@ -97,5 +122,6 @@ file static class SignedXml
 {
     public const string XmlDsigNamespaceUrl = "http://www.w3.org/2000/09/xmldsig#";
 }
+
 
 

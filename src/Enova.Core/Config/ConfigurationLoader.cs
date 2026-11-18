@@ -3,7 +3,7 @@ using System.Text;
 namespace Lragrz.Enova.Core.Config;
 
 /// <summary>
-/// Loads key=value style config.properties (Java-compatible) plus optional overrides.
+/// Loads key=value style properties (Java-compatible) plus optional overrides.
 /// </summary>
 public static class ConfigurationLoader
 {
@@ -16,12 +16,9 @@ public static class ConfigurationLoader
         if (!string.IsNullOrWhiteSpace(explicitPath))
             candidates.Add(explicitPath);
 
-        // Next to the running assembly
         var assemblyDir = AppContext.BaseDirectory;
         candidates.Add(Path.Combine(assemblyDir, fileName));
         candidates.Add(Path.Combine(assemblyDir, "config", fileName));
-
-        // Current working directory
         candidates.Add(Path.Combine(Directory.GetCurrentDirectory(), fileName));
         candidates.Add(Path.Combine(Directory.GetCurrentDirectory(), "config", fileName));
 
@@ -29,7 +26,6 @@ public static class ConfigurationLoader
 
         if (found is null)
         {
-            // First run: write a default config next to the EXE (client or server specific)
             var defaultPath = Path.Combine(assemblyDir, fileName);
             try
             {
@@ -46,9 +42,7 @@ public static class ConfigurationLoader
         }
 
         config.ConfigFilePath = found;
-        var lines = File.ReadAllLines(found, Encoding.UTF8);
-
-        foreach (var raw in lines)
+        foreach (var raw in File.ReadAllLines(found, Encoding.UTF8))
         {
             var line = raw.Trim();
             if (line.Length == 0 || line.StartsWith('#') || line.StartsWith(';'))
@@ -58,13 +52,45 @@ public static class ConfigurationLoader
             if (idx <= 0)
                 continue;
 
-            var key = line[..idx].Trim();
-            var value = line[(idx + 1)..].Trim();
-
-            Apply(config, key, value);
+            Apply(config, line[..idx].Trim(), line[(idx + 1)..].Trim());
         }
 
+        // Environment overrides (deployment without editing files)
+        ApplyEnvOverrides(config);
         return config;
+    }
+
+    private static void ApplyEnvOverrides(EnovaConfiguration config)
+    {
+        var baseUrl = Environment.GetEnvironmentVariable("ENOVA_BASEURL")
+                      ?? Environment.GetEnvironmentVariable("ENOVA_SERVER_BASEURL");
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+            config.ServerBaseUrl = baseUrl.Trim();
+
+        var mode = Environment.GetEnvironmentVariable("ENOVA_NETWORK_MODE");
+        if (!string.IsNullOrWhiteSpace(mode))
+            config.NetworkMode = mode.Trim();
+
+        var bind = Environment.GetEnvironmentVariable("ENOVA_BIND");
+        if (!string.IsNullOrWhiteSpace(bind))
+            config.NetworkBind = bind.Trim();
+
+        var port = Environment.GetEnvironmentVariable("ENOVA_PORT");
+        if (!string.IsNullOrWhiteSpace(port) && int.TryParse(port, out var p) && p > 0)
+            config.NetworkPort = p;
+
+        var listen = Environment.GetEnvironmentVariable("ENOVA_URLS")
+                     ?? Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
+        if (!string.IsNullOrWhiteSpace(listen))
+            config.ListenUrl = listen.Trim();
+
+        var signing = Environment.GetEnvironmentVariable("ENOVA_SIGNING_ENABLED");
+        if (!string.IsNullOrWhiteSpace(signing))
+            config.SigningEnabled = signing.Equals("true", StringComparison.OrdinalIgnoreCase) || signing == "1";
+
+        var hosts = Environment.GetEnvironmentVariable("ENOVA_ALLOWED_HOSTS");
+        if (!string.IsNullOrWhiteSpace(hosts))
+            config.AllowedHosts = hosts.Trim();
     }
 
     private static void Apply(EnovaConfiguration config, string key, string value)
@@ -73,6 +99,9 @@ public static class ConfigurationLoader
         {
             case "enova.crypto.provider":
                 config.CryptoProvider = value;
+                break;
+            case "enova.crypto.signing.enabled":
+                config.SigningEnabled = value.Equals("true", StringComparison.OrdinalIgnoreCase) || value == "1";
                 break;
             case "enova.vda.rest.endpoint":
                 config.VdaRestEndpoint = value;
@@ -86,18 +115,41 @@ public static class ConfigurationLoader
             case "enova.server.baseurl":
                 config.ServerBaseUrl = value;
                 break;
+            case "enova.server.listenurl":
+                config.ListenUrl = value;
+                break;
+            case "enova.network.mode":
+                config.NetworkMode = value;
+                break;
+            case "enova.network.bind":
+                config.NetworkBind = value;
+                break;
+            case "enova.network.port":
+                if (int.TryParse(value, out var port) && port > 0)
+                    config.NetworkPort = port;
+                break;
+            case "enova.network.allowedhosts":
+                config.AllowedHosts = value;
+                break;
+            case "enova.network.forwardedheaders":
+                config.ForwardedHeaders = value.Equals("true", StringComparison.OrdinalIgnoreCase) || value == "1";
+                break;
+            case "enova.network.pathbase":
+                config.PathBase = string.IsNullOrWhiteSpace(value) ? null : value;
+                break;
             case "enova.seed.all":
                 config.SeedAll = !value.Equals("false", StringComparison.OrdinalIgnoreCase);
                 break;
             case "enova.upload.enabled":
-                config.UploadEnabled = value.Equals("true", StringComparison.OrdinalIgnoreCase)
-                                       || value == "1";
+                config.UploadEnabled = value.Equals("true", StringComparison.OrdinalIgnoreCase) || value == "1";
                 break;
             case "enova.upload.api.endpoint":
                 config.UploadApiEndpoint = value;
                 break;
             case "enova.local.output.directory":
-                var expanded = Environment.ExpandEnvironmentVariables(value);
+                var expanded = Environment.GetEnvironmentVariables().Count >= 0
+                    ? Environment.ExpandEnvironmentVariables(value)
+                    : value;
                 try { config.LocalOutputDirectory = Path.GetFullPath(expanded); }
                 catch { config.LocalOutputDirectory = expanded; }
                 break;
@@ -111,47 +163,31 @@ public static class ConfigurationLoader
     }
 
     private const string DefaultClientConfig = """
-        # =============================================================================
-        # eNoVA EGOV – Client Properties
-        # Author: EGOV | Version: 0.0.1
-        # Auto-generated on first run. Edit as needed.
-        # =============================================================================
-
-        # Auth / config server (only local setting the client needs)
+        # eNoVa_tor – Client (auto-generated)
+        # Only required setting: where the API lives
         enova.server.baseurl=http://localhost:5101
-
-        # Local output base (client-side paths)
+        # Optional local override (server value wins after login)
+        enova.crypto.signing.enabled=false
         enova.local.output.directory=%USERPROFILE%\\Documents\\eNoVa_tor
-
-        # Sub-folders
         enova.output.antworten=antworten
         enova.output.ablage=ablage
         """;
 
     private const string DefaultServerConfig = """
-        # =============================================================================
-        # eNoVA EGOV – Server Properties
-        # Author: EGOV | Version: 0.0.1
-        # Auto-generated on first run. Edit as needed.
-        # =============================================================================
-
-        # Crypto provider the clients must use
+        # eNoVa_tor – Server (auto-generated)
         enova.crypto.provider=MOCK_FALLBACK
-
-        # Production VDA / D-Trust endpoint
+        enova.crypto.signing.enabled=false
         enova.vda.rest.endpoint=https://d-trust.de
-
-        # Authority identifier
         enova.authority.identifier=DE-LRAGRZ-01
-
-        # Absender name
         enova.sender.name=LRA-GRZ
-
-        # Listen URL
         enova.server.baseurl=http://localhost:5101
-
-        # Upload settings served to clients
+        enova.network.mode=local
+        enova.network.bind=127.0.0.1
+        enova.network.port=5101
+        enova.network.allowedhosts=*
+        enova.network.forwardedheaders=true
         enova.upload.enabled=false
         enova.upload.api.endpoint=http://localhost:5101/api/documents
+        enova.seed.all=true
         """;
 }

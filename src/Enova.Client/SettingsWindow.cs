@@ -716,3 +716,4 @@ public class DivisionManagementWindow : Window
         return grid;
     }
 }
+

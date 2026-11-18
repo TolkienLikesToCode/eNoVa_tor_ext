@@ -10,15 +10,25 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 
-// Force the port the client expects (config.properties / default http://localhost:5101)
-builder.WebHost.UseUrls("http://localhost:5101");
+// --- Network: fully configuration-driven (no hard-coded bind/port) ---
+var enovaConfigEarly = ConfigurationLoader.Load(fileName: "eNoVa_tor.server.properties");
+var listenUrls = enovaConfigEarly.ResolveListenUrls();
+Console.WriteLine($"[eNoVa_tor] Network mode={enovaConfigEarly.NetworkMode} listen={listenUrls} baseUrl={enovaConfigEarly.ServerBaseUrl}");
+builder.WebHost.UseUrls(listenUrls);
+builder.Services.Configure<Microsoft.AspNetCore.HostFiltering.HostFilteringOptions>(o =>
+{
+    o.AllowedHosts.Clear();
+    foreach (var h in enovaConfigEarly.AllowedHosts.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        o.AllowedHosts.Add(h);
+});
+
 
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = 50 * 1024 * 1024; // 50 MB
 });
 
-var enovaConfig = ConfigurationLoader.Load(fileName: "eNoVa_tor.server.properties");
+var enovaConfig = enovaConfigEarly;
 builder.Services.AddSingleton(enovaConfig);
 builder.Services.AddSingleton<SchemaCatalogService>();
 builder.Services.AddSingleton<ReferenceDataService>();
@@ -97,6 +107,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+if (enovaConfig.ForwardedHeaders)
+{
+    var fwd = new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
+    {
+        ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                         | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+                         | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedHost
+    };
+    fwd.KnownNetworks.Clear();
+    fwd.KnownProxies.Clear();
+    app.UseForwardedHeaders(fwd);
+}
+if (!string.IsNullOrWhiteSpace(enovaConfig.PathBase))
+{
+    app.UsePathBase(enovaConfig.PathBase.TrimEnd('/'));
+}
+
 
 using (var scope = app.Services.CreateScope())
 {
@@ -336,11 +364,13 @@ app.MapGet("/api/config", async (EnovaDbContext db, ClaimsPrincipal principal, E
     return Results.Ok(new
     {
         CryptoProvider = agency?.CryptoProvider ?? cfg.CryptoProvider,
+        SigningEnabled = cfg.SigningEnabled,
         VdaRestEndpoint = cfg.VdaRestEndpoint,
         AuthorityIdentifier = agency?.AuthorityIdentifier ?? org?.DefaultAuthority ?? cfg.AuthorityIdentifier,
         SenderName = agency?.SenderName ?? org?.DefaultSender ?? cfg.SenderName,
         UploadEnabled = org?.DefaultUploadEnabled ?? cfg.UploadEnabled,
         UploadApiEndpoint = cfg.UploadApiEndpoint,
+        ServerBaseUrl = cfg.ServerBaseUrl,
         LocalOutputDirectory = agency?.LocalOutputDirectory,
         OutputAntworten = agency?.OutputAntworten,
         OutputAblage = agency?.OutputAblage,
@@ -656,4 +686,5 @@ public record UpdateAgencyRequest(
     string? OutputAblage,
     string? DmsConfigJson);
 public record UpdateUserRequest(string? DisplayName, string? Role, string? Password, bool? IsActive);
+
 

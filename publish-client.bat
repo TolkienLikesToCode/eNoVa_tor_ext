@@ -21,3 +21,4 @@ exit /b 0
 echo Publish failed.
 pause
 exit /b 1
+

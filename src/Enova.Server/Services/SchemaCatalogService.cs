@@ -100,3 +100,4 @@ public sealed class SchemaFileEntry
     public long SizeBytes { get; set; }
 }
 
+

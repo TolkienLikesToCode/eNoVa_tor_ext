@@ -15,3 +15,4 @@ public static class Brand
 
     public static string Window(string specific) => $"{Title} – {specific}";
 }
+

@@ -129,3 +129,4 @@ public sealed class ReferenceDataService
 
 public sealed record CaseworkerDto(string Key, string DisplayName, string Vorname, string Nachname);
 public sealed record CodeListEntryDto(string Code, string Label);
+

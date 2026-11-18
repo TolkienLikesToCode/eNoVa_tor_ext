@@ -82,3 +82,4 @@ public sealed class ValidationAssetStore
 public sealed record AssetInfo(string RelativePath, long SizeBytes, DateTime LastWriteUtc, string Sha256);
 public sealed record AssetContent(string RelativePath, byte[] Data, string Sha256, DateTime LastWriteUtc);
 
+

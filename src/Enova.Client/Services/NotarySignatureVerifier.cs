@@ -119,3 +119,4 @@ public static class NotarySignatureVerifier
         return false;
     }
 }
+

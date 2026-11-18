@@ -31,8 +31,8 @@ public partial class MainWindow : Window
     }
 
     private readonly EnovaConfiguration _config;
-    private readonly IQesProvider _qesProvider;
-    private readonly EnovaXmlProcessor _processor;
+    private IQesProvider _qesProvider;
+    private EnovaXmlProcessor _processor;
     private readonly DocumentUploadClient _uploadClient;
     private readonly AuthSession _session;
     private readonly UserPreferences _prefs;
@@ -67,9 +67,15 @@ public partial class MainWindow : Window
         var loggerFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Information));
         var factory = new QesProviderFactory(_config, loggerFactory);
         _qesProvider = factory.Create();
-        _processor = new EnovaXmlProcessor(_qesProvider, loggerFactory.CreateLogger<EnovaXmlProcessor>(), _config.SenderName);
+        _processor = new EnovaXmlProcessor(
+            _qesProvider,
+            loggerFactory.CreateLogger<EnovaXmlProcessor>(),
+            _config.SenderName,
+            signingEnabled: _config.SigningEnabled);
 
-        ProviderLabel.Text = _qesProvider.DisplayName;
+        ProviderLabel.Text = _config.SigningEnabled
+            ? _qesProvider.DisplayName
+            : "Signatur deaktiviert (nur reine Antwort)";
         QuestPDF.Settings.License = LicenseType.Community;
 
         ApplyUserChrome();
@@ -108,6 +114,7 @@ public partial class MainWindow : Window
 
         Loaded += async (_, _) =>
         {
+            try { await _session.ApplyRemoteConfigAsync(); RebuildProcessorFromConfig(); } catch { }
             await LoadReferenceDataAsync();
             QueueList.ItemsSource = null;
             await SendHeartbeatAsync();
@@ -416,30 +423,38 @@ public partial class MainWindow : Window
         {
             var doc = _processor.LoadFromFile(path);
 
-            var sig = NotarySignatureVerifier.Verify(path);
-            if (!sig.IsVerified)
+            // Signing is OFF unless server/client config explicitly enables it.
+            if (_config.SigningEnabled)
             {
-                if (sig.Mode == "Keine Signatur")
-                {
-                    MessageBox.Show("Keine Signatur gefunden. Bitte die zugehörige .p7s-Datei angeben.", "Signatur fehlt");
-                    var p7s = PromptForDetachedSignature();
-                    if (p7s is null)
-                    {
-                        MessageBox.Show("Keine Signatur angegeben. Datei wird nicht geöffnet.", "Abgelehnt");
-                        return;
-                    }
-                    sig = NotarySignatureVerifier.VerifyWithDetached(path, p7s);
-                }
-
+                var sig = NotarySignatureVerifier.Verify(path);
                 if (!sig.IsVerified)
                 {
-                    MessageBox.Show($"Signatur ungültig.\n\n{sig.Summary}", "Abgelehnt", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-            }
+                    if (sig.Mode == "Keine Signatur")
+                    {
+                        MessageBox.Show("Keine Signatur gefunden. Bitte die zugehörige .p7s-Datei angeben.", "Signatur fehlt");
+                        var p7s = PromptForDetachedSignature();
+                        if (p7s is null)
+                        {
+                            MessageBox.Show("Keine Signatur angegeben. Datei wird nicht geöffnet.", "Abgelehnt");
+                            return;
+                        }
+                        sig = NotarySignatureVerifier.VerifyWithDetached(path, p7s);
+                    }
 
-            MessageBox.Show($"{sig.Summary}\n\nModus: {sig.Mode}\nUnterzeichner: {sig.Signer ?? "—"}", Brand.Window("Signatur gültig"), MessageBoxButton.OK, MessageBoxImage.Information);
-            SignatureInfo.Text = $"Signatur: {sig.Mode} · {sig.Signer ?? "—"}";
+                    if (!sig.IsVerified)
+                    {
+                        MessageBox.Show($"Signatur ungültig.\n\n{sig.Summary}", "Abgelehnt", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                }
+
+                MessageBox.Show($"{sig.Summary}\n\nModus: {sig.Mode}\nUnterzeichner: {sig.Signer ?? "—"}", Brand.Window("Signatur gültig"), MessageBoxButton.OK, MessageBoxImage.Information);
+                SignatureInfo.Text = $"Signatur: {sig.Mode} · {sig.Signer ?? "—"}";
+            }
+            else
+            {
+                SignatureInfo.Text = "Signaturprüfung deaktiviert (Konfiguration)";
+            }
 
             ErsuchenSachentscheidungChecker.Check(doc);
 
@@ -512,28 +527,36 @@ public partial class MainWindow : Window
             {
                 var doc = _processor.LoadFromFile(path);
 
-                var sig = NotarySignatureVerifier.Verify(path);
-                if (!sig.IsVerified)
+                if (_config.SigningEnabled)
                 {
-                    if (sig.Mode == "Keine Signatur")
-                    {
-                        MessageBox.Show("Keine Signatur gefunden. Bitte die zugehörige .p7s-Datei angeben.", "Signatur fehlt");
-                        var p7s = PromptForDetachedSignature();
-                        if (p7s is null)
-                        {
-                            MessageBox.Show("Keine Signatur angegeben. Datei wird nicht geöffnet.", "Abgelehnt");
-                            continue;
-                        }
-                        sig = NotarySignatureVerifier.VerifyWithDetached(path, p7s);
-                    }
+                    var sig = NotarySignatureVerifier.Verify(path);
                     if (!sig.IsVerified)
                     {
-                        MessageBox.Show($"Signatur ungültig.\n\n{sig.Summary}", "Abgelehnt", MessageBoxButton.OK, MessageBoxImage.Error);
-                        continue;
+                        if (sig.Mode == "Keine Signatur")
+                        {
+                            MessageBox.Show("Keine Signatur gefunden. Bitte die zugehörige .p7s-Datei angeben.", "Signatur fehlt");
+                            var p7s = PromptForDetachedSignature();
+                            if (p7s is null)
+                            {
+                                MessageBox.Show("Keine Signatur angegeben. Datei wird nicht geöffnet.", "Abgelehnt");
+                                continue;
+                            }
+                            sig = NotarySignatureVerifier.VerifyWithDetached(path, p7s);
+                        }
+                        if (!sig.IsVerified)
+                        {
+                            MessageBox.Show($"Signatur ungültig.\n\n{sig.Summary}", "Abgelehnt", MessageBoxButton.OK, MessageBoxImage.Error);
+                            continue;
+                        }
                     }
-                }
 
-                MessageBox.Show($"{sig.Summary}\n\nModus: {sig.Mode}\nUnterzeichner: {sig.Signer ?? "—"}", "Signatur gültig");
+                    MessageBox.Show($"{sig.Summary}\n\nModus: {sig.Mode}\nUnterzeichner: {sig.Signer ?? "—"}", "Signatur gültig");
+                    SignatureInfo.Text = $"Signatur: {sig.Mode} · {sig.Signer ?? "—"}";
+                }
+                else
+                {
+                    SignatureInfo.Text = "Signaturprüfung deaktiviert (Konfiguration)";
+                }
 
                 ErsuchenSachentscheidungChecker.Check(doc);
 
@@ -723,8 +746,27 @@ public partial class MainWindow : Window
         DecisionCombo.SelectedIndex = -1;
     }
 
+
+    private void RebuildProcessorFromConfig()
+    {
+        var loggerFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Information));
+        var factory = new QesProviderFactory(_config, loggerFactory);
+        _qesProvider = factory.Create();
+        _processor = new EnovaXmlProcessor(
+            _qesProvider,
+            loggerFactory.CreateLogger<EnovaXmlProcessor>(),
+            _config.SenderName,
+            signingEnabled: _config.SigningEnabled);
+        ProviderLabel.Text = _config.SigningEnabled
+            ? _qesProvider.DisplayName
+            : "Signatur deaktiviert (nur reine Antwort)";
+        if (!_config.SigningEnabled)
+            SignatureInfo.Text = "Signaturprüfung deaktiviert (Konfiguration)";
+    }
+
     private async void OnGenerateAnswer(object sender, RoutedEventArgs e)
     {
+        try { await _session.ApplyRemoteConfigAsync(); RebuildProcessorFromConfig(); } catch { }
         if (_current is null)
         {
             MessageBox.Show(Strings.Get("msg.openFirst"), Strings.Get("msg.hint"));
@@ -1044,3 +1086,4 @@ public partial class MainWindow : Window
         MessageBox.Show("Bitte „Antwort generieren und exportieren“ verwenden.", "Hinweis");
     }
 }
+

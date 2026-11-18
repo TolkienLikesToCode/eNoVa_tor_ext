@@ -134,3 +134,4 @@ public sealed class DocuWareService
         return cfg;
     }
 }
+

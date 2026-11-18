@@ -131,6 +131,9 @@ public sealed class AuthSession
 
         if (root.TryGetProperty("cryptoProvider", out var cp))
             _config.CryptoProvider = cp.GetString() ?? _config.CryptoProvider;
+        if (root.TryGetProperty("signingEnabled", out var se) &&
+            (se.ValueKind == JsonValueKind.True || se.ValueKind == JsonValueKind.False))
+            _config.SigningEnabled = se.GetBoolean();
         if (root.TryGetProperty("vdaRestEndpoint", out var vda))
             _config.VdaRestEndpoint = vda.GetString() ?? _config.VdaRestEndpoint;
         if (root.TryGetProperty("authorityIdentifier", out var auth))
@@ -199,4 +202,5 @@ public sealed class AuthSession
         catch { /* ignore */ }
     }
 }
+
 

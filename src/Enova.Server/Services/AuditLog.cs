@@ -37,3 +37,4 @@ public static class AuditLog
     public static void Info(string message) => Write("INFO", message);
 }
 
+

@@ -313,3 +313,4 @@ public class UserEditDialog : Window
         return p.Any(char.IsUpper) && p.Any(char.IsLower) && p.Any(char.IsDigit) && p.Any(c => !char.IsLetterOrDigit(c));
     }
 }
+
