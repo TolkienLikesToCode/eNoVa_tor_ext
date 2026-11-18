@@ -1,0 +1,37 @@
+# TLS termination in front of Enova.Server (Kestrel on 127.0.0.1:5101)
+# sudo ln -s /etc/nginx/sites-available/enova /etc/nginx/sites-enabled/
+# sudo nginx -t && sudo systemctl reload nginx
+
+upstream enova_kestrel {
+    server 127.0.0.1:5101;
+    keepalive 16;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name enova.example.local;
+
+    ssl_certificate     /etc/ssl/enova/fullchain.pem;
+    ssl_certificate_key /etc/ssl/enova/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    # Large PDF/A-3 uploads
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass         http://enova_kestrel;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+}
+
+server {
+    listen 80;
+    server_name enova.example.local;
+    return 301 https://$host$request_uri;
+}

@@ -1,0 +1,28 @@
+# Example reverse-proxy in front of Enova.Server (TLS termination)
+# Install: https://caddyserver.com/docs/install
+# Place certs or let Caddy obtain them (internal CA / ACME).
+
+enova.example.local {
+    # Force HTTPS
+    encode zstd gzip
+
+    # Forward to Kestrel (bound to localhost only on the server)
+    reverse_proxy 127.0.0.1:5101 {
+        # Preserve client IP for rate limiting / audit
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+    }
+
+    # Optional: basic hardening
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/enova-access.log
+    }
+}
