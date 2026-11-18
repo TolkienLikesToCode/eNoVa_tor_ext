@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Xml;
+using Lragrz.Enova.Core.Xml;
 
 namespace Lragrz.Enova.Client.Services;
 
@@ -51,7 +52,7 @@ public static class NativePreviewBuilder
         panel.Children.Add(Header("Nachricht"));
         panel.Children.Add(Row("Gegenstand", X("//tns:grunddaten/tns:verfahrensdaten/tns:instanzdaten/tns:verfahrensgegenstand/tns:gegenstand")));
         panel.Children.Add(Row("Aktenzeichen", string.IsNullOrEmpty(fileNumberOverride) ? X("//tns:nachrichtenkopf/tns:absender/tns:aktenzeichen") : fileNumberOverride));
-        panel.Children.Add(Row("Erstellt", X("//tns:nachrichtenkopf/tns:erstellungszeitpunkt")));
+        panel.Children.Add(Row("Erstellt", EnovaDateTime.FormatDisplay(X("//tns:nachrichtenkopf/tns:erstellungszeitpunkt"))));
         panel.Children.Add(Row("Absender", X("//tns:nachrichtenkopf/tns:absender/tns:informationen/tns:auswahl_kommunikationspartner/tns:sonstige")));
 
         // Parties
@@ -62,7 +63,7 @@ public static class NativePreviewBuilder
         panel.Children.Add(Separator());
         panel.Children.Add(Header("Urkunde"));
         panel.Children.Add(Row("UVZ-Nr.", X("//tns:datenDerUrkunde/tns:urNr")));
-        panel.Children.Add(Row("Beurkundung", X("//tns:datenDerUrkunde/tns:urkundsdatum")));
+        panel.Children.Add(Row("Beurkundung", EnovaDateTime.FormatDate(X("//tns:datenDerUrkunde/tns:urkundsdatum"))));
 
         // Grundstück
         panel.Children.Add(Header("Grundstück"));

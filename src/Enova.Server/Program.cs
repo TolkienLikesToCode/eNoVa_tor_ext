@@ -170,6 +170,32 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Log every API request (method, path, status, duration, user)
+app.Use(async (ctx, next) =>
+{
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var path = ctx.Request.Path.Value ?? "";
+    try
+    {
+        await next();
+    }
+    finally
+    {
+        sw.Stop();
+        if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+        {
+            var user = ctx.User?.Identity?.IsAuthenticated == true
+                ? (ctx.User.Identity?.Name ?? "?")
+                : "-";
+            var q = ctx.Request.QueryString.HasValue ? ctx.Request.QueryString.Value : "";
+            AuditLog.Write(
+                "HTTP//" + ctx.Request.Method,
+                $"{path}{q} → {ctx.Response.StatusCode} ({sw.ElapsedMilliseconds} ms)",
+                user);
+        }
+    }
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -480,44 +506,64 @@ app.MapGet("/api/schemas/files/{*relativePath}", (string relativePath, SchemaCat
 // ---------- Document upload ----------
 app.MapGet("/api/cases/check", async (string caseId, string? sigHash, EnovaDbContext db) =>
 {
-    // Match by case ID or by fingerprint (signature + UVZ + date + Flurstück)
-    var existing = await db.ProcessedCases.AsNoTracking()
-        .FirstOrDefaultAsync(c => c.CaseId == caseId || (sigHash != null && c.SignatureHash == sigHash));
-    if (existing is null)
-        return Results.Ok(new { exists = false });
+    var rows = await db.ProcessedCases.AsNoTracking()
+        .Where(c => c.CaseId == caseId || (sigHash != null && c.SignatureHash == sigHash))
+        .OrderByDescending(c => c.ProcessedAt)
+        .Take(50)
+        .ToListAsync();
 
-    var user = await db.Users.AsNoTracking().Include(u => u.Agency)
-        .FirstOrDefaultAsync(u => u.Username == existing.ProcessedBy);
-    var divLabel = user?.Agency?.Name ?? "";
+    if (rows.Count == 0)
+        return Results.Ok(new { exists = false, history = Array.Empty<object>() });
+
+    var usernames = rows.Select(r => r.ProcessedBy).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
+    var users = await db.Users.AsNoTracking().Include(u => u.Agency)
+        .Where(u => usernames.Contains(u.Username))
+        .ToListAsync();
+    var byName = users.ToDictionary(u => u.Username, u => u);
+
+    var history = rows.Select(r =>
+    {
+        byName.TryGetValue(r.ProcessedBy ?? "", out var u);
+        return new
+        {
+            processedBy = r.ProcessedBy,
+            processedAt = r.ProcessedAt,
+            divisionLabel = u?.Agency?.Name ?? "",
+            reason = r.SpecificsHash,
+            signatureHash = r.SignatureHash,
+            sameSignature = sigHash is not null && r.SignatureHash == sigHash
+        };
+    }).ToList();
+
+    var latest = history[0];
     return Results.Ok(new
     {
         exists = true,
-        processedBy = existing.ProcessedBy,
-        processedAt = existing.ProcessedAt,
-        divisionLabel = divLabel,
-        sameSignature = sigHash is not null && existing.SignatureHash == sigHash
+        processedBy = latest.processedBy,
+        processedAt = latest.processedAt,
+        divisionLabel = latest.divisionLabel,
+        sameSignature = latest.sameSignature,
+        history
     });
 }).RequireAuthorization();
 
 app.MapPost("/api/cases/record", async (RecordCaseRequest req, EnovaDbContext db, ClaimsPrincipal principal) =>
 {
-    var existing = await db.ProcessedCases.FirstOrDefaultAsync(c => c.CaseId == req.CaseId);
-    if (existing is not null)
-        return Results.Conflict(new { error = "Vorgang bereits bearbeitet.", processedBy = existing.ProcessedBy, processedAt = existing.ProcessedAt });
-
-    db.ProcessedCases.Add(new ProcessedCaseEntity
+    // Always append a history entry – re-processing is allowed
+    var entity = new ProcessedCaseEntity
     {
         Id = Guid.NewGuid(),
         CaseId = req.CaseId,
         SignatureHash = req.SignatureHash,
-        SpecificsHash = req.SpecificsHash,
+        SpecificsHash = req.SpecificsHash ?? req.Reason,
         ProcessedBy = principal.Identity?.Name,
         ProcessedAt = DateTime.UtcNow
-    });
+    };
+    db.ProcessedCases.Add(entity);
     await db.SaveChangesAsync();
     var dbUser = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == principal.Identity!.Name);
-    AuditLog.Write("FILE//GENERATION", $"case recorded: {req.CaseId}", principal.Identity?.Name, dbUser?.AgencyId?.ToString(), dbUser?.OrganisationId?.ToString());
-    return Results.Ok(new { recorded = req.CaseId });
+    AuditLog.Action($"case recorded: {req.CaseId} (history)", principal.Identity?.Name, dbUser?.AgencyId?.ToString(), dbUser?.OrganisationId?.ToString());
+    return Results.Ok(new { recorded = req.CaseId, id = entity.Id, processedAt = entity.ProcessedAt });
 }).RequireAuthorization();
 
 app.MapGet("/api/upload-queue", async (EnovaDbContext db, ClaimsPrincipal principal) =>
@@ -666,7 +712,7 @@ app.MapGet("/health", async (EnovaDbContext db) =>
 app.Run();
 
 
-public record RecordCaseRequest(string CaseId, string? SignatureHash, string? SpecificsHash);
+public record RecordCaseRequest(string CaseId, string? SignatureHash, string? SpecificsHash, string? Reason = null);
 public record LoginRequest(string Username, string Password);
 public record SignAuthorizeRequest(string? SignPassword, string? AuthorityIdentifier);
 public record CreateUserRequest(string Username, string Password, string DisplayName, string Role);

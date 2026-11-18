@@ -114,7 +114,7 @@ public partial class MainWindow : Window
 
         Loaded += async (_, _) =>
         {
-            try { await _session.ApplyRemoteConfigAsync(); RebuildProcessorFromConfig(); } catch { }
+            // Config is applied at login/load – skip remote round-trip on every export
             await LoadReferenceDataAsync();
             QueueList.ItemsSource = null;
             await SendHeartbeatAsync();
@@ -167,10 +167,10 @@ public partial class MainWindow : Window
     {
         try
         {
-            using var http = EnovaHttp.Create(TimeSpan.FromSeconds(10));
+            var http = EnovaHttp.Shared;
             var url = shutdown
-                ? $"{_config.ServerBaseUrl.TrimEnd('/')}/api/auth/logout"
-                : $"{_config.ServerBaseUrl.TrimEnd('/')}/api/heartbeat";
+                ? $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/auth/logout"
+                : $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/heartbeat";
             using var req = new HttpRequestMessage(HttpMethod.Post, url);
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _session.AccessToken);
             await http.SendAsync(req);
@@ -366,28 +366,51 @@ public partial class MainWindow : Window
     {
         try
         {
-            using var http = EnovaHttp.Create(TimeSpan.FromSeconds(15));
-            var url = $"{_config.ServerBaseUrl.TrimEnd('/')}/api/cases/check?caseId={Uri.EscapeDataString(caseId)}";
+            var http = EnovaHttp.Shared;
+            var url = $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/cases/check?caseId={Uri.EscapeDataString(caseId)}";
             if (!string.IsNullOrEmpty(fingerprint))
                 url += $"&sigHash={Uri.EscapeDataString(fingerprint)}";
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _session.AccessToken);
-            using var resp = await http.SendAsync(req);
+            using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
             if (!resp.IsSuccessStatusCode)
-                return (true, "Vorgangsprüfung fehlgeschlagen.");
+                return (false, ""); // soft: do not block open on API errors
             var json = await resp.Content.ReadAsStringAsync();
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             var exists = doc.RootElement.TryGetProperty("exists", out var ex) && ex.GetBoolean();
             if (!exists) return (false, "");
-            var by = doc.RootElement.TryGetProperty("processedBy", out var pb) ? pb.GetString() : "?";
-            var div = doc.RootElement.TryGetProperty("divisionLabel", out var dl) ? dl.GetString() : "";
-            var at = doc.RootElement.TryGetProperty("processedAt", out var pa) ? pa.GetString() : "";
-            var who = string.IsNullOrEmpty(div) ? by : $"{by}//{div}";
-            return (true, $"Bearbeitet von {who} am {at}");
+
+            // Prefer full history (multiple prior processings)
+            if (doc.RootElement.TryGetProperty("history", out var hist) && hist.ValueKind == System.Text.Json.JsonValueKind.Array
+                && hist.GetArrayLength() > 0)
+            {
+                var lines = new System.Text.StringBuilder();
+                lines.AppendLine($"Dieser Vorgang wurde bereits {hist.GetArrayLength()}× bearbeitet:");
+                foreach (var item in hist.EnumerateArray())
+                {
+                    var by = item.TryGetProperty("processedBy", out var pb) ? pb.GetString() : "?";
+                    var div = item.TryGetProperty("divisionLabel", out var dl) ? dl.GetString() : "";
+                    var at = item.TryGetProperty("processedAt", out var pa) ? pa.GetString() : "";
+                    var reason = item.TryGetProperty("reason", out var rs) ? rs.GetString() : null;
+                    var who = string.IsNullOrEmpty(div) ? by : $"{by} ({div})";
+                    lines.Append(" • ").Append(who).Append(" am ").Append(at);
+                    if (!string.IsNullOrEmpty(reason))
+                        lines.Append(" – ").Append(reason);
+                    lines.AppendLine();
+                }
+                lines.AppendLine().Append("Sie können den Vorgang erneut öffnen und bearbeiten.");
+                return (true, lines.ToString().TrimEnd());
+            }
+
+            var by1 = doc.RootElement.TryGetProperty("processedBy", out var pb1) ? pb1.GetString() : "?";
+            var div1 = doc.RootElement.TryGetProperty("divisionLabel", out var dl1) ? dl1.GetString() : "";
+            var at1 = doc.RootElement.TryGetProperty("processedAt", out var pa1) ? pa1.GetString() : "";
+            var who1 = string.IsNullOrEmpty(div1) ? by1 : $"{by1}//{div1}";
+            return (true, $"Bereits bearbeitet von {who1} am {at1}. Erneutes Öffnen ist möglich.");
         }
         catch
         {
-            return (true, "Vorgangsprüfung nicht erreichbar.");
+            return (false, ""); // soft-fail: allow open
         }
     }
 
@@ -395,8 +418,8 @@ public partial class MainWindow : Window
     {
         try
         {
-            using var http = EnovaHttp.Create(TimeSpan.FromSeconds(15));
-            using var req = new HttpRequestMessage(HttpMethod.Post, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/cases/record")
+            var http = EnovaHttp.Shared;
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/cases/record")
             {
                 Content = System.Net.Http.Json.JsonContent.Create(new { caseId, signatureHash = fingerprint, specificsHash = fingerprint })
             };
@@ -462,11 +485,11 @@ public partial class MainWindow : Window
             if (!string.IsNullOrEmpty(az))
             {
                 var fp = CaseFingerprint(doc, _pendingDetached);
-                var (blocked, info) = await CheckCaseAlreadyProcessedAsync(az, fp);
-                if (blocked)
+                var (seenBefore, info) = await CheckCaseAlreadyProcessedAsync(az, fp);
+                if (seenBefore && !string.IsNullOrEmpty(info))
                 {
-                    MessageBox.Show($"Vorgang {az} wurde bereits bearbeitet.\n\n{info}", "Bereits bearbeitet", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
+                    MessageBox.Show($"Vorgang {az} – Hinweis zur Vorbearbeitung:\n\n{info}", "Bereits bearbeitet", MessageBoxButton.OK, MessageBoxImage.Information);
+                    // continue – allow opening again
                 }
             }
 
@@ -766,7 +789,7 @@ public partial class MainWindow : Window
 
     private async void OnGenerateAnswer(object sender, RoutedEventArgs e)
     {
-        try { await _session.ApplyRemoteConfigAsync(); RebuildProcessorFromConfig(); } catch { }
+        // Config is applied at login/load – skip remote round-trip on every export
         if (_current is null)
         {
             MessageBox.Show(Strings.Get("msg.openFirst"), Strings.Get("msg.hint"));
@@ -788,10 +811,15 @@ public partial class MainWindow : Window
 
         var fingerprint = CaseFingerprint(_current.Document, _current.DetachedSignaturePath);
         var (alreadyDone, info) = await CheckCaseAlreadyProcessedAsync(caseId, fingerprint);
-        if (!string.IsNullOrEmpty(caseId) && alreadyDone)
+        if (!string.IsNullOrEmpty(caseId) && alreadyDone && !string.IsNullOrEmpty(info))
         {
-            MessageBox.Show($"Vorgang {caseId} wurde bereits bearbeitet.\n\n{info}", "Bereits bearbeitet", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
+            var cont = MessageBox.Show(
+                $"Dieser Vorgang wurde bereits bearbeitet:\n\n{info}\n\nTrotzdem erneut speichern?",
+                "Bereits bearbeitet",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (cont != MessageBoxResult.Yes)
+                return;
         }
 
         try
@@ -845,7 +873,6 @@ public partial class MainWindow : Window
             ViewerHost.Content = NativePreviewBuilder.Build(_lastResult.SignedDocument, caseworkerName);
 
             // Auto-queue the PDF if uploads are enabled
-            try { await _session.ApplyRemoteConfigAsync(); } catch { }
             if (_config.UploadEnabled && !string.IsNullOrEmpty(_lastPdfPath))
             {
                 try
@@ -903,7 +930,7 @@ public partial class MainWindow : Window
         var gegenstand = X("//tns:gegenstand");
         var aktenzeichen = X("//tns:aktenzeichen");
         var urNr = X("//tns:urNr");
-        var urDatum = X("//tns:urkundsdatum");
+        var urDatum = EnovaDateTime.FormatDate(X("//tns:urkundsdatum"));
         var amtsgericht = X("//tns:amtsgericht");
         var blatt = X("//tns:grundbuchblatt");
 

@@ -23,7 +23,7 @@ public class SettingsWindow : Window
     {
         _session = session;
         _config = config;
-        _http = EnovaHttp.Create(TimeSpan.FromSeconds(30));
+        _http = EnovaHttp.Shared;
 
         Title = "Einstellungen";
         Width = 980;
@@ -108,7 +108,7 @@ public class SettingsWindow : Window
             if (dlg.ShowDialog() != true || string.IsNullOrWhiteSpace(name)) return;
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Post, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/agencies")
+                using var req = new HttpRequestMessage(HttpMethod.Post, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/agencies")
                 {
                     Content = JsonContent.Create(new
                     {
@@ -135,7 +135,7 @@ public class SettingsWindow : Window
             if (MessageBox.Show($"Behörde „{d.Name}“ löschen?", "Bestätigung", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Delete, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/agencies/{d.Id}");
+                using var req = new HttpRequestMessage(HttpMethod.Delete, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/agencies/{d.Id}");
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
                 using var resp = await _http.SendAsync(req);
                 resp.EnsureSuccessStatusCode();
@@ -157,7 +157,7 @@ public class SettingsWindow : Window
     {
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/agencies");
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/agencies");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
             using var resp = await _http.SendAsync(req);
             resp.EnsureSuccessStatusCode();
@@ -216,7 +216,7 @@ public class SettingsWindow : Window
             if (dlg.ShowDialog() != true) return;
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Post, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users")
+                using var req = new HttpRequestMessage(HttpMethod.Post, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users")
                 {
                     Content = JsonContent.Create(new { username = dlg.Username, password = dlg.Password, displayName = dlg.DisplayName, role = dlg.Role })
                 };
@@ -234,7 +234,7 @@ public class SettingsWindow : Window
             if (dlg.ShowDialog() != true) return;
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Put, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users/{user.Id}")
+                using var req = new HttpRequestMessage(HttpMethod.Put, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users/{user.Id}")
                 {
                     Content = JsonContent.Create(new { displayName = dlg.DisplayName, role = dlg.Role, password = string.IsNullOrEmpty(dlg.Password) ? null : dlg.Password })
                 };
@@ -251,7 +251,7 @@ public class SettingsWindow : Window
             if (MessageBox.Show($"Benutzer „{user.Username}“ löschen?", "Bestätigung", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Delete, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users/{user.Id}");
+                using var req = new HttpRequestMessage(HttpMethod.Delete, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users/{user.Id}");
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
                 using var resp = await _http.SendAsync(req);
                 resp.EnsureSuccessStatusCode();
@@ -268,7 +268,7 @@ public class SettingsWindow : Window
     {
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users");
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
             using var resp = await _http.SendAsync(req);
             resp.EnsureSuccessStatusCode();
@@ -315,7 +315,7 @@ public class SettingsWindow : Window
         {
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Put, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/organisation")
+                using var req = new HttpRequestMessage(HttpMethod.Put, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/organisation")
                 {
                     Content = JsonContent.Create(new
                     {
@@ -337,7 +337,7 @@ public class SettingsWindow : Window
         {
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Get, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/organisation");
+                using var req = new HttpRequestMessage(HttpMethod.Get, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/organisation");
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
                 using var resp = await _http.SendAsync(req);
                 if (!resp.IsSuccessStatusCode) return;
@@ -447,7 +447,7 @@ public class DivisionManagementWindow : Window
         _session = session;
         _config = config;
         _division = division;
-        _http = EnovaHttp.Create(TimeSpan.FromSeconds(30));
+        _http = EnovaHttp.Shared;
 
         Title = Brand.Window($"Behörde: {division.Name}");
         Width = 800;
@@ -479,7 +479,7 @@ public class DivisionManagementWindow : Window
         {
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Get, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/agencies");
+                using var req = new HttpRequestMessage(HttpMethod.Get, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/agencies");
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
                 using var resp = await _http.SendAsync(req);
                 var agencies = await resp.Content.ReadFromJsonAsync<List<DivisionDto>>();
@@ -522,7 +522,7 @@ public class DivisionManagementWindow : Window
             }
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Put, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/agencies/{_division.Id}")
+                using var req = new HttpRequestMessage(HttpMethod.Put, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/agencies/{_division.Id}")
                 {
                     Content = JsonContent.Create(new
                     {
@@ -580,7 +580,7 @@ public class DivisionManagementWindow : Window
         {
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Get, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/agencies");
+                using var req = new HttpRequestMessage(HttpMethod.Get, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/agencies");
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
                 using var resp = await _http.SendAsync(req);
                 var agencies = await resp.Content.ReadFromJsonAsync<List<DivisionDto>>();
@@ -601,7 +601,7 @@ public class DivisionManagementWindow : Window
             try
             {
                 var dmsConfig = System.Text.Json.JsonSerializer.Serialize(new { locked = lockBox.IsChecked == true });
-                using var req = new HttpRequestMessage(HttpMethod.Put, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/agencies/{_division.Id}")
+                using var req = new HttpRequestMessage(HttpMethod.Put, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/agencies/{_division.Id}")
                 {
                     Content = JsonContent.Create(new { dmsType = dmsBox.SelectedItem?.ToString(), dmsConfigJson = dmsConfig })
                 };
@@ -647,7 +647,7 @@ public class DivisionManagementWindow : Window
         {
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Get, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users");
+                using var req = new HttpRequestMessage(HttpMethod.Get, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users");
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
                 using var resp = await _http.SendAsync(req);
                 var users = await resp.Content.ReadFromJsonAsync<List<UserDto>>() ?? new();
@@ -665,7 +665,7 @@ public class DivisionManagementWindow : Window
             {
                 try
                 {
-                    using var req = new HttpRequestMessage(HttpMethod.Post, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users")
+                    using var req = new HttpRequestMessage(HttpMethod.Post, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users")
                     {
                         Content = JsonContent.Create(new { username = dlg.Username, password = dlg.Password, displayName = dlg.DisplayName, role = dlg.Role })
                     };
@@ -685,7 +685,7 @@ public class DivisionManagementWindow : Window
             {
                 try
                 {
-                    using var req = new HttpRequestMessage(HttpMethod.Put, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users/{user.Id}")
+                    using var req = new HttpRequestMessage(HttpMethod.Put, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users/{user.Id}")
                     {
                         Content = JsonContent.Create(new { displayName = dlg.DisplayName, role = dlg.Role, password = string.IsNullOrEmpty(dlg.Password) ? null : dlg.Password })
                     };
@@ -703,7 +703,7 @@ public class DivisionManagementWindow : Window
             if (MessageBox.Show($"Benutzer „{user.Username}“ löschen?", "Bestätigung", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Delete, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users/{user.Id}");
+                using var req = new HttpRequestMessage(HttpMethod.Delete, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users/{user.Id}");
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
                 using var resp = await _http.SendAsync(req);
                 resp.EnsureSuccessStatusCode();

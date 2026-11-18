@@ -22,7 +22,7 @@ public partial class AccountManagementWindow : Window
     {
         _session = session;
         _config = config;
-        _http = EnovaHttp.Create(TimeSpan.FromSeconds(30));
+        _http = EnovaHttp.Shared;
 
         Title = "Kontenverwaltung";
         Width = 720;
@@ -78,7 +78,7 @@ public partial class AccountManagementWindow : Window
     {
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users");
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
             using var resp = await _http.SendAsync(req);
             resp.EnsureSuccessStatusCode();
@@ -99,7 +99,7 @@ public partial class AccountManagementWindow : Window
 
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Post, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users")
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users")
             {
                 Content = JsonContent.Create(new
                 {
@@ -128,7 +128,7 @@ public partial class AccountManagementWindow : Window
 
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Put, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users/{user.Id}")
+            using var req = new HttpRequestMessage(HttpMethod.Put, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users/{user.Id}")
             {
                 Content = JsonContent.Create(new
                 {
@@ -158,7 +158,7 @@ public partial class AccountManagementWindow : Window
 
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Delete, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/users/{user.Id}");
+            using var req = new HttpRequestMessage(HttpMethod.Delete, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/users/{user.Id}");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
             using var resp = await _http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();

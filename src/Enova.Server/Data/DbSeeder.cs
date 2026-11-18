@@ -87,16 +87,28 @@ public static class DbSeeder
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
-        // Ensure processed_cases exists even on older databases
+        // Ensure processed_cases exists; allow multiple history rows per case_id
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS processed_cases (
                 id uuid PRIMARY KEY,
-                case_id varchar(128) NOT NULL UNIQUE,
+                case_id varchar(128) NOT NULL,
                 signature_hash varchar(128),
                 specifics_hash varchar(128),
                 processed_by varchar(128),
                 processed_at timestamp
             )
+            """, ct).ConfigureAwait(false);
+        // Drop legacy unique constraint/index on case_id if present
+        await db.Database.ExecuteSqlRawAsync("""
+            DO $$ BEGIN
+              IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'processed_cases_case_id_key') THEN
+                ALTER TABLE processed_cases DROP CONSTRAINT processed_cases_case_id_key;
+              END IF;
+            END $$;
+            """, ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS ix_processed_cases_case_id ON processed_cases (case_id);
+            CREATE INDEX IF NOT EXISTS ix_processed_cases_processed_at ON processed_cases (processed_at);
             """, ct).ConfigureAwait(false);
 
         // Clear stale sessions on startup

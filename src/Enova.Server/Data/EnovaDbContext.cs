@@ -87,7 +87,8 @@ public sealed class EnovaDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.CaseId).HasColumnName("case_id").HasMaxLength(128).IsRequired();
-            e.HasIndex(x => x.CaseId).IsUnique();
+            e.HasIndex(x => x.CaseId);
+            e.HasIndex(x => x.ProcessedAt);
             e.Property(x => x.SignatureHash).HasColumnName("signature_hash").HasMaxLength(128);
             e.Property(x => x.SpecificsHash).HasColumnName("specifics_hash").HasMaxLength(128);
             e.Property(x => x.ProcessedBy).HasColumnName("processed_by").HasMaxLength(128);

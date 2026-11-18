@@ -24,7 +24,7 @@ public sealed class DocumentUploadClient : IDisposable
     public DocumentUploadClient(EnovaConfiguration config, HttpClient? httpClient = null)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
-        _http = httpClient ?? EnovaHttp.Create(TimeSpan.FromMinutes(2));
+        _http = httpClient ?? EnovaHttp.Shared;
     }
 
     public bool IsAuthenticated => !string.IsNullOrEmpty(_bearerToken);
@@ -33,7 +33,7 @@ public sealed class DocumentUploadClient : IDisposable
 
     public async Task LoginAsync(string username, string password, CancellationToken ct = default)
     {
-        var baseUrl = _config.ServerBaseUrl.TrimEnd('/');
+        var baseUrl = EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl);
         var payload = new { username, password };
         using var content = new StringContent(
             JsonSerializer.Serialize(payload),
@@ -65,7 +65,7 @@ public sealed class DocumentUploadClient : IDisposable
             throw new InvalidOperationException("Not authenticated. Call LoginAsync first.");
 
         var endpoint = string.IsNullOrWhiteSpace(_config.UploadApiEndpoint)
-            ? _config.ServerBaseUrl.TrimEnd('/') + "/api/documents"
+            ? EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl) + "/api/documents"
             : _config.UploadApiEndpoint;
 
         using var form = new MultipartFormDataContent();
@@ -104,7 +104,7 @@ public sealed class DocumentUploadClient : IDisposable
         }
     }
 
-    public void Dispose() => _http.Dispose();
+    public void Dispose() { /* shared HttpClient – do not dispose */ }
 }
 
 public sealed record UploadResult(bool Success, string ResponseBody);

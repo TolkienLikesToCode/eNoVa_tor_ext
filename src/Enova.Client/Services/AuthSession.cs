@@ -33,8 +33,8 @@ public sealed class AuthSession
 
     public async Task LoginAsync(string username, string password, bool rememberMe, CancellationToken ct = default)
     {
-        using var http = EnovaHttp.Create(TimeSpan.FromSeconds(30));
-        var url = $"{_config.ServerBaseUrl.TrimEnd('/')}/api/auth/login";
+        var http = EnovaHttp.Shared;
+        var url = $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/auth/login";
         var payload = JsonSerializer.Serialize(new { username, password });
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
 
@@ -118,8 +118,8 @@ public sealed class AuthSession
     {
         if (string.IsNullOrEmpty(AccessToken)) return;
 
-        using var http = EnovaHttp.Create(TimeSpan.FromSeconds(15));
-        using var req = new HttpRequestMessage(HttpMethod.Get, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/config");
+        var http = EnovaHttp.Shared;
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/config");
         req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", AccessToken);
 
         using var resp = await http.SendAsync(req, ct).ConfigureAwait(false);
@@ -156,8 +156,8 @@ public sealed class AuthSession
         {
             if (!string.IsNullOrEmpty(AccessToken))
             {
-                using var http = EnovaHttp.Create(TimeSpan.FromSeconds(5));
-                using var req = new HttpRequestMessage(HttpMethod.Post, $"{_config.ServerBaseUrl.TrimEnd('/')}/api/auth/logout");
+                var http = EnovaHttp.Shared;
+                using var req = new HttpRequestMessage(HttpMethod.Post, $"{EnovaHttp.NormalizeBaseUrl(_config.ServerBaseUrl)}/api/auth/logout");
                 req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", AccessToken);
                 http.Send(req);
             }

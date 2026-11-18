@@ -1,5 +1,6 @@
 using System.Text;
 using System.Xml;
+using Lragrz.Enova.Core.Xml;
 
 namespace Lragrz.Enova.Client.Services;
 
@@ -60,7 +61,7 @@ public static class ReadablePreviewBuilder
 
         var gegenstand = X("//tns:grunddaten/tns:verfahrensdaten/tns:instanzdaten/tns:verfahrensgegenstand/tns:gegenstand");
         var aktenzeichen = X("//tns:nachrichtenkopf/tns:absender/tns:aktenzeichen");
-        var erstellt = FormatDate(X("//tns:nachrichtenkopf/tns:erstellungszeitpunkt"));
+        var erstellt = EnovaDateTime.FormatDisplay(X("//tns:nachrichtenkopf/tns:erstellungszeitpunkt"));
         var absenderName = X("//tns:nachrichtenkopf/tns:absender/tns:informationen/tns:auswahl_kommunikationspartner/tns:sonstige");
 
         sb.Append("<h2>Nachricht</h2>");
@@ -80,7 +81,7 @@ public static class ReadablePreviewBuilder
         sb.Append("<h2>Urkunde</h2>");
         sb.Append("<div class=\"row\"><span class=\"label\">UVZ-Nr.</span>").Append(X("//tns:datenDerUrkunde/tns:urNr")).Append("</div>");
         sb.Append("<div class=\"row\"><span class=\"label\">Beurkundung</span>")
-          .Append(HtmlSanitizer.Text(FormatDate(document.SelectSingleNode("//tns:datenDerUrkunde/tns:urkundsdatum", nsmgr)?.InnerText))).Append("</div>");
+          .Append(HtmlSanitizer.Text(EnovaDateTime.FormatDisplay(document.SelectSingleNode("//tns:datenDerUrkunde/tns:urkundsdatum", nsmgr)?.InnerText))).Append("</div>");
 
         // Grundstück
         sb.Append("<h2>Grundstück</h2>");
@@ -150,7 +151,7 @@ public static class ReadablePreviewBuilder
             AppendPersonLines(sb, b, nsmgr, title);
     }
 
-    private static string? FormatDate(string? iso)
+    private static string? EnovaDateTime.FormatDisplay(string? iso)
     {
         if (string.IsNullOrWhiteSpace(iso)) return null;
         iso = iso.Trim();
